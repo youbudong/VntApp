@@ -173,8 +173,8 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: |
-          	./artifacts/vntApp-windows/vntApp-windows.zip
-          	./artifacts/vntApp-android/app-release.apk
+            ./artifacts/vntApp-windows/vntApp-windows.zip
+            ./artifacts/vntApp-android/app-release.apk
           tag: ${{ github.ref }}
           overwrite: true
           file_glob: true
