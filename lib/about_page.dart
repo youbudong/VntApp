@@ -32,14 +32,14 @@ class AboutPage extends StatelessWidget {
                 children: [
                   const Flexible(
                     child: SelectableText(
-                      "开放所有源代码 https://github.com/lbl8603/vnt",
+                      "开放所有源代码 https://github.com/vnt-dev/vnt",
                       style: TextStyle(fontSize: 16),
                       textAlign: TextAlign.center,
                     ),
                   ),
                   TextButton(
                     onPressed: () {
-                      launchUrl(Uri.parse('https://github.com/lbl8603/vnt'));
+                      launchUrl(Uri.parse('https://github.com/vnt-dev/vnt'));
                     },
                     child: const Text('点击跳转'),
                   ),
@@ -47,7 +47,7 @@ class AboutPage extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               const Text(
-                '版本号: 1.2.11-预发布版',
+                '版本号: 1.2.16',
                 style: TextStyle(fontSize: 16),
                 textAlign: TextAlign.center,
               ),
