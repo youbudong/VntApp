@@ -20,3 +20,7 @@ log4rs = "1.2.0"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.13"
+
+[target.'cfg(windows)'.build-dependencies]
+thunk-rs = { version = "0.3.3", features = ["win7"] }
+
