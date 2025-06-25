@@ -5,6 +5,8 @@ class CustomTooltipTextField extends StatefulWidget {
   final String labelText;
   final String tooltipMessage;
   final int maxLength;
+  final bool obscureText;
+  final Widget? suffixIcon;
   final String? Function(String?)? validator;
 
   const CustomTooltipTextField({
@@ -14,6 +16,8 @@ class CustomTooltipTextField extends StatefulWidget {
     required this.tooltipMessage,
     this.maxLength = 32,
     this.validator,
+    this.suffixIcon,
+    this.obscureText = false,
   });
 
   @override
@@ -60,9 +64,11 @@ class _CustomTooltipTextFieldState extends State<CustomTooltipTextField> {
           controller: widget.controller,
           validator: widget.validator,
           focusNode: _focusNode,
+          obscureText: widget.obscureText,
           decoration: InputDecoration(
             labelText: !_showTooltip ? widget.labelText : null,
             errorText: _errorText,
+            suffixIcon: widget.suffixIcon,
           ),
           maxLength: widget.maxLength,
         ),

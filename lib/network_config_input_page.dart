@@ -19,10 +19,11 @@ class _NetworkConfigInputPageState extends State<NetworkConfigInputPage> {
   final _nameController = TextEditingController();
   final _groupNumberController = TextEditingController();
   final _deviceNameController = TextEditingController(
-      text: Platform.localHostname.length > 32
-          ? Platform.localHostname.substring(0, 32)
-          : Platform.localHostname);
+      text: Platform.operatingSystemVersion.length > 16
+          ? Platform.operatingSystemVersion.substring(0, 16)
+          : Platform.operatingSystemVersion);
   final _virtualIPv4Controller = TextEditingController();
+  final _localIPv4Controller = TextEditingController();
   final _serverAddressController = TextEditingController();
   final _stunServers = <TextEditingController>[];
   final _inIps = <TextEditingController>[];
@@ -37,11 +38,12 @@ class _NetworkConfigInputPageState extends State<NetworkConfigInputPage> {
   final _simulatedPacketLossRateController = TextEditingController();
   final _simulatedLatencyController = TextEditingController();
 
-  String _isServerEncrypted = 'OPEN';
+  String _isServerEncrypted = 'CLOSE';
   bool _isPasswordVisible = false;
+  bool _isTokenVisible = false;
   String _communicationMethod = 'UDP';
   String _dataFingerprintVerification = 'CLOSE';
-  String _encryptionAlgorithm = 'aes_gcm';
+  String _encryptionAlgorithm = 'xor';
   String _routingMode = 'P2P';
   String _builtInIpProxy = 'OPEN';
   bool _isMoreParametersVisible = false;
@@ -49,6 +51,7 @@ class _NetworkConfigInputPageState extends State<NetworkConfigInputPage> {
   bool _ipv6Selected = true;
   bool _relaySelected = true;
   bool _p2pSelected = true;
+  String _allowWg = 'FALSE';
 
   String _compressionMethod = 'none'; // 默认不压缩
   int _compressionLevel = 3; // 默认压缩级别
@@ -147,6 +150,8 @@ class _NetworkConfigInputPageState extends State<NetworkConfigInputPage> {
         _compressionLevel = int.tryParse(arr[1]) ?? 3;
       }
     }
+    _allowWg = config.allowWg ? 'FALSE' : 'TRUE';
+    _localIPv4Controller.text = config.localIpv4;
     setState(() {
       _routingMode = config.firstLatency ? 'LOW_LATENCY' : 'P2P';
       _builtInIpProxy = config.noInIpProxy ? 'CLOSE' : 'OPEN';
@@ -226,6 +231,8 @@ class _NetworkConfigInputPageState extends State<NetworkConfigInputPage> {
             : (_p2pSelected ? 'p2p' : 'relay'),
         compressor:
             '$_compressionMethod${_compressionMethod == 'zstd' ? ',$_compressionLevel' : ''}',
+        allowWg: _allowWg == 'FALSE' ? false : true,
+        localIpv4: _localIPv4Controller.text,
       );
       Navigator.pop(context, config);
     } else {
@@ -286,19 +293,30 @@ class _NetworkConfigInputPageState extends State<NetworkConfigInputPage> {
                 CustomTooltipTextField(
                   controller: _nameController,
                   labelText: '配置名称',
-                  tooltipMessage: '(方便区分不同配置项，可填任意字符)',
+                  tooltipMessage: '(方便在首页区分不同的组网配置选项，可填任意字符)',
                   maxLength: 10,
                 ),
                 const SizedBox(height: 20),
                 _buildSectionTitle('基本参数'),
                 CustomTooltipTextField(
                   controller: _groupNumberController,
-                  labelText: '组网编号',
-                  tooltipMessage: '(标识同一个虚拟网络)',
+                  labelText: '组网token',
+                  tooltipMessage: '(相同的token和服务器才能组建一个虚拟局域网)',
                   maxLength: 64,
+                  obscureText: !_isTokenVisible, // 控制是否隐藏文本
+                  suffixIcon: IconButton( // 可见性切换按钮
+                    icon: Icon(
+                      _isTokenVisible ? Icons.visibility : Icons.visibility_off,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _isTokenVisible = !_isTokenVisible;
+                      });
+                    },
+                  ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return '请输入组网编号';
+                      return '请输入token';
                     }
                     return null;
                   },
@@ -335,7 +353,7 @@ class _NetworkConfigInputPageState extends State<NetworkConfigInputPage> {
                 CustomTooltipTextField(
                   controller: _serverAddressController,
                   labelText: '服务器地址',
-                  tooltipMessage: '(VNTS地址,udp和tcp模式可以使用txt:前缀启用TXT记录解析)',
+                  tooltipMessage: '(VNTS地址,udp和tcp模式使用txt:前缀启用TXT记录解析,使用http:前缀启用302重定向解析)',
                   maxLength: 64,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
@@ -383,28 +401,12 @@ class _NetworkConfigInputPageState extends State<NetworkConfigInputPage> {
                         return null;
                       }
                       return '域名格式错误';
-                    } else {
-                      final match = addressPortRegex.firstMatch(value);
-                      if (match != null) {
-                        final domainRegex =
-                            RegExp(r'^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
-                        if (!domainRegex.hasMatch(match.group(1)!)) {
-                          return '地址格式错误';
-                        }
-                        final port = int.tryParse(match.group(2)!);
-                        if (port != null && port >= 1 && port <= 65535) {
-                          return null;
-                        } else {
-                          return '端口错误';
-                        }
-                      } else {
-                        return '地址格式错误';
-                      }
-                    }
+                    } 
+                    return null;
                   },
                 ),
                 _buildRadioGroup(
-                  '通信方式',
+                  '协议',
                   [
                     ('UDP', 'UDP'),
                     ('TCP', 'TCP'),
@@ -449,11 +451,21 @@ class _NetworkConfigInputPageState extends State<NetworkConfigInputPage> {
                       });
                     },
                   ),
+                _buildRadioGroup(
+                  '允许WireGuard流量',
+                  [('允许', 'TRUE'), ('不允许', 'FALSE')],
+                  _allowWg,
+                  (value) {
+                    setState(() {
+                      _allowWg = value!;
+                    });
+                  },
+                ),
                 _buildSectionTitle('子网代理&端口映射'),
                 _buildDynamicTooltipFields(
                   'in-ip',
                   _inIps,
-                  '示例：192.168.0.1/24,10.26.0.10',
+                  '例如想要通过10.26.0.10去访问192.168.0.*网段内其他设备则填：192.168.0.1/24,10.26.0.10',
                   34,
                   IpUtils.parseInIpString,
                 ),
@@ -514,13 +526,13 @@ class _NetworkConfigInputPageState extends State<NetworkConfigInputPage> {
                 _buildDropdownField(
                   '加密算法',
                   [
-                    'aes_gcm',
+                    'xor',
                     'chacha20_poly1305',
                     'chacha20',
-                    'aes_cbc',
                     'aes_ecb',
+                    'aes_cbc',
                     'sm4_cbc',
-                    'xor'
+                    'aes_gcm'
                   ],
                   _encryptionAlgorithm,
                   (value) {
@@ -562,6 +574,23 @@ class _NetworkConfigInputPageState extends State<NetworkConfigInputPage> {
                         null,
                         null,
                         false,
+                      ),
+                      CustomTooltipTextField(
+                        controller: _localIPv4Controller,
+                        labelText: '本地IPv4',
+                        tooltipMessage: '(不输入则自动获取)',
+                        maxLength: 15,
+                        validator: (value) {
+                          final regex = RegExp(
+                            r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$',
+                          );
+                          if (value != null &&
+                              value.isNotEmpty &&
+                              !regex.hasMatch(value)) {
+                            return '请输入有效的 IPv4 地址';
+                          }
+                          return null;
+                        },
                       ),
                       _buildTextFormField(
                         _virtualNetworkCardNameController,
@@ -637,7 +666,7 @@ class _NetworkConfigInputPageState extends State<NetworkConfigInputPage> {
                       ),
                       _buildRadioGroup(
                         '路径模式',
-                        [('P2P优先', 'P2P'), ('低延迟优先', 'LOW_LATENCY')],
+                        [('P2P优先-表示客户端直连优先', 'P2P'), ('低延迟优先-可能经过服务器转发', 'LOW_LATENCY')],
                         _routingMode,
                         (value) {
                           setState(() {
@@ -758,7 +787,7 @@ class _NetworkConfigInputPageState extends State<NetworkConfigInputPage> {
             children: list.map(((String, String) x) {
               return Row(
                 children: [
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 4),
                   Radio<String>(
                     value: x.$2,
                     groupValue: groupValue,

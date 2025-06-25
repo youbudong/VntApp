@@ -23,36 +23,37 @@ class VntBox {
   });
   static Future<VntBox> create(NetworkConfig config, SendPort uiCall) async {
     var vntConfig = VntConfig(
-      tap: false,
-      token: config.token,
-      deviceId: config.deviceID,
-      name: config.deviceName,
-      serverAddressStr: config.serverAddress,
-      nameServers: config.dns,
-      stunServer: config.stunServers,
-      inIps: config.inIps.map((v) => IpUtils.parseInIpString(v)).toList(),
-      outIps: config.outIps.map((v) => IpUtils.parseOutIpString(v)).toList(),
-      password: config.groupPassword.isEmpty ? null : config.groupPassword,
-      mtu: config.mtu == 0 ? null : config.mtu,
-      ip: config.virtualIPv4.isEmpty ? null : config.virtualIPv4,
-      noProxy: config.noInIpProxy,
-      serverEncrypt: config.isServerEncrypted,
-      cipherModel: config.encryptionAlgorithm,
-      finger: config.dataFingerprintVerification,
-      punchModel: config.punchModel,
-      ports: config.ports.isEmpty ? null : Uint16List.fromList(config.ports),
-      firstLatency: config.firstLatency,
-      deviceName: config.virtualNetworkCardName.isEmpty
-          ? null
-          : config.virtualNetworkCardName,
-      useChannelType: config.useChannelType,
-      packetLossRate: config.simulatedPacketLossRate == 0
-          ? null
-          : config.simulatedPacketLossRate,
-      packetDelay: config.simulatedLatency,
-      portMappingList: config.portMappings,
-      compressor: config.compressor.isEmpty ? 'none' : config.compressor,
-    );
+        tap: false,
+        token: config.token,
+        deviceId: config.deviceID,
+        name: config.deviceName,
+        serverAddressStr: config.serverAddress,
+        nameServers: config.dns,
+        stunServer: config.stunServers,
+        inIps: config.inIps.map((v) => IpUtils.parseInIpString(v)).toList(),
+        outIps: config.outIps.map((v) => IpUtils.parseOutIpString(v)).toList(),
+        password: config.groupPassword.isEmpty ? null : config.groupPassword,
+        mtu: config.mtu == 0 ? null : config.mtu,
+        ip: config.virtualIPv4.isEmpty ? null : config.virtualIPv4,
+        noProxy: config.noInIpProxy,
+        serverEncrypt: config.isServerEncrypted,
+        cipherModel: config.encryptionAlgorithm,
+        finger: config.dataFingerprintVerification,
+        punchModel: config.punchModel,
+        ports: config.ports.isEmpty ? null : Uint16List.fromList(config.ports),
+        firstLatency: config.firstLatency,
+        deviceName: config.virtualNetworkCardName.isEmpty
+            ? null
+            : config.virtualNetworkCardName,
+        useChannelType: config.useChannelType,
+        packetLossRate: config.simulatedPacketLossRate == 0
+            ? null
+            : config.simulatedPacketLossRate,
+        packetDelay: config.simulatedLatency,
+        portMappingList: config.portMappings,
+        compressor: config.compressor.isEmpty ? 'none' : config.compressor,
+        allowWireGuard: config.allowWg,
+        localIpv4: config.localIpv4.isEmpty ? null : config.localIpv4);
     var vntCall = VntApiCallback(successFn: () {
       uiCall.send('success');
     }, createTunFn: (info) {
@@ -149,14 +150,20 @@ class VntBox {
 
 class VntManager {
   HashMap<String, VntBox> map = HashMap();
+  bool connecting = false;
   Future<VntBox> create(NetworkConfig config, SendPort uiCall) async {
     var key = config.itemKey;
     if (map.containsKey(key)) {
       return map[key]!;
     }
-    var vntBox = await VntBox.create(config, uiCall);
-    map[key] = vntBox;
-    return vntBox;
+    try {
+      connecting = true;
+      var vntBox = await VntBox.create(config, uiCall);
+      map[key] = vntBox;
+      return vntBox;
+    } finally {
+      connecting = false;
+    }
   }
 
   VntBox? get(String key) {
@@ -186,6 +193,10 @@ class VntManager {
     return vntBox != null && !vntBox.isClosed();
   }
 
+  bool isConnecting() {
+    return connecting;
+  }
+
   bool hasConnection() {
     if (map.isEmpty) {
       return false;
@@ -211,13 +222,27 @@ class VntManager {
   }
 }
 
+typedef StartCallback = Future<void> Function();
+
 class VntAppCall {
   static MethodChannel channel = const MethodChannel('top.wherewego.vnt/vpn');
+  static StartCallback startCall = () async {};
+  static void setStartCall(StartCallback startCall) {
+    VntAppCall.startCall = startCall;
+  }
+
   static void init() {
     channel.setMethodCallHandler((MethodCall call) async {
       switch (call.method) {
         case 'stopVnt':
           await vntManager.removeAll();
+          break;
+        case 'startVnt':
+          await startCall();
+          return vntManager.hasConnection();
+        case 'isRunning':
+          debugPrint("isRunning ${vntManager.hasConnection()}");
+          return vntManager.hasConnection();
         default:
           throw PlatformException(
             code: 'Unimplemented',
@@ -230,6 +255,14 @@ class VntAppCall {
   static Future<int> startVpn(RustDeviceConfig info, int mtu) async {
     return await VntAppCall.channel
         .invokeMethod('startVpn', rustDeviceConfigToMap(info, mtu));
+  }
+
+  static Future<void> moveTaskToBack() async {
+    return await VntAppCall.channel.invokeMethod('moveTaskToBack');
+  }
+
+  static Future<bool> isTileStart() async {
+    return await VntAppCall.channel.invokeMethod('isTileStart');
   }
 
   static Future<void> stopVpn() async {
